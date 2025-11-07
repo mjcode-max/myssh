@@ -134,7 +134,7 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { invoke } from '@tauri-apps/api/tauri'
 import TerminalPane from './TerminalPane.vue'
-import { info } from '@/utils/toast'
+import { info, error as showError, success } from '@/utils/toast'
 
 const props = defineProps({
   tab: Object,
@@ -298,10 +298,16 @@ function handleClear() {
   // 由 TerminalPane 处理
 }
 
-function handleReconnect() {
-  // TODO: 调用 Tauri 重连逻辑
-  // await invoke('reconnect_terminal', { serverId: props.server.id })
-  info('重连功能待实现')
+async function handleReconnect() {
+  try {
+    // 调用 Tauri API 重连终端
+    const { reconnectTerminal } = await import('@/api/ssh')
+    await reconnectTerminal(props.server.id)
+    success('重连成功')
+  } catch (err) {
+    console.error('重连失败:', err)
+    showError('重连失败: ' + (err.message || '未知错误'))
+  }
 }
 
 // 暴露方法供父组件调用

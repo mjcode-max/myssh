@@ -196,16 +196,19 @@ async function handleSend() {
   scrollToBottom()
 
   try {
-    // TODO: 调用 Tauri API 与 AI 服务交互
-    // const response = await invoke('chat_with_ai', {
-    //   serverId: props.server.id,
-    //   question: question,
-    //   history: messages.value.slice(0, -1)
-    // })
-
-    // 模拟AI响应（临时）
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    const aiResponse = generateMockResponse(question)
+    // 调用 Tauri API 与 AI 服务交互
+    const { chatWithAi } = await import('@/api/ai')
+    const response = await chatWithAi({
+      serverId: props.server.id,
+      question: question,
+      history: messages.value.slice(0, -1).map(msg => ({
+        role: msg.role,
+        content: msg.content,
+        timestamp: msg.timestamp
+      }))
+    })
+    
+    const aiResponse = response.content
 
     messages.value.push({
       role: 'assistant',

@@ -163,25 +163,57 @@ const serverMonitorAutoRefresh = ref({}) // { serverId: boolean }
 // 每个服务器的终端引用
 const terminalRefs = ref({}) // { serverId: TerminalTab }
 
+// 获取服务器列表实际宽度
+const getServerListWidth = () => {
+  // 尝试从DOM获取实际宽度
+  const serverListElement = document.querySelector('.server-list')
+  if (serverListElement) {
+    const computedStyle = window.getComputedStyle(serverListElement)
+    const width = parseFloat(computedStyle.width)
+    if (!isNaN(width) && width > 0) {
+      return width
+    }
+  }
+  
+  // 如果无法从DOM获取，尝试从localStorage读取
+  const savedWidth = localStorage.getItem('serverListWidth')
+  if (savedWidth) {
+    const width = parseInt(savedWidth, 10)
+    if (width >= 200 && width <= 800) {
+      return width
+    }
+  }
+  
+  // 默认值：窗口宽度的28%，最小280px，最大600px
+  const windowWidth = window.innerWidth
+  return Math.max(280, Math.min(600, windowWidth * 0.28))
+}
+
 // 区域尺寸 - 根据窗口大小计算默认比例
 const getDefaultFilemanagerWidth = () => {
-  // 默认左侧区域占窗口宽度的 35%，最小 350px，最大 600px
+  // 默认左侧区域占窗口宽度的 35%，最小 250px，最大 600px
   const windowWidth = window.innerWidth
-  const defaultWidth = Math.max(350, Math.min(600, windowWidth * 0.35))
+  const serverListWidth = getServerListWidth()
+  const availableWidth = windowWidth - serverListWidth - 40 // 减去服务器列表和按钮栏
+  const defaultWidth = Math.max(250, Math.min(600, availableWidth * 0.35))
   return Math.round(defaultWidth)
 }
 
 const getDefaultTerminalHeight = () => {
-  // 默认终端占窗口高度的 50%，最小 200px，最大 60vh
+  // 默认终端占窗口高度的 50%，最小 150px，最大 60vh
   const windowHeight = window.innerHeight
-  const defaultHeight = Math.max(200, Math.min(windowHeight * 0.5, 500))
+  const headerHeight = 36 // 标签页头部高度
+  const availableHeight = windowHeight - headerHeight
+  const defaultHeight = Math.max(150, Math.min(availableHeight * 0.5, 500))
   return Math.round(defaultHeight)
 }
 
 const getDefaultRightPanelWidth = () => {
-  // 默认右侧面板占窗口宽度的 30%，最小 300px，最大 500px
+  // 默认右侧面板占窗口宽度的 30%，最小 250px，最大 500px
   const windowWidth = window.innerWidth
-  const defaultWidth = Math.max(300, Math.min(500, windowWidth * 0.3))
+  const serverListWidth = getServerListWidth()
+  const availableWidth = windowWidth - serverListWidth - 40 // 减去服务器列表和按钮栏
+  const defaultWidth = Math.max(250, Math.min(500, availableWidth * 0.3))
   return Math.round(defaultWidth)
 }
 
@@ -575,22 +607,32 @@ function handleResize(event) {
     // 调整左侧区域宽度（终端和文件管理器共用）
     const deltaX = event.clientX - startX.value
     const newWidth = startLeftWidth.value + deltaX
-    const minWidth = 300
-    const maxWidth = window.innerWidth * 0.7
+    const serverListWidth = getServerListWidth()
+    const buttonBarWidth = 40
+    const rightPanelWidth = getRightPanelVisible(serverId) ? getRightPanelWidth(serverId) : 0
+    const availableWidth = window.innerWidth - serverListWidth - buttonBarWidth - rightPanelWidth - 4
+    const minWidth = 200
+    const maxWidth = Math.max(minWidth, availableWidth * 0.8)
     serverSizes.value[serverId].width = Math.max(minWidth, Math.min(maxWidth, newWidth))
   } else if (resizeType.value === 'horizontal-terminal') {
     // 调整终端高度（终端和文件管理器之间的分割器）
     const deltaY = event.clientY - startY.value
     const newHeight = startTerminalHeight.value + deltaY
-    const minHeight = 200
-    const maxHeight = window.innerHeight * 0.7
+    const headerHeight = 36
+    const availableHeight = window.innerHeight - headerHeight
+    const minHeight = 150
+    const maxHeight = Math.max(minHeight, availableHeight * 0.8)
     serverSizes.value[serverId].terminalHeight = Math.max(minHeight, Math.min(maxHeight, newHeight))
   } else if (resizeType.value === 'vertical-right') {
     // 调整右侧面板宽度（从左侧拖动，向右缩小，向左扩大）
     const deltaX = startX.value - event.clientX
     const newWidth = startRightPanelWidth.value + deltaX
-    const minWidth = 300
-    const maxWidth = window.innerWidth * 0.5
+    const serverListWidth = getServerListWidth()
+    const buttonBarWidth = 40
+    const leftWidth = getServerWidth(serverId)
+    const availableWidth = window.innerWidth - serverListWidth - buttonBarWidth - leftWidth - 4
+    const minWidth = 200
+    const maxWidth = Math.max(minWidth, availableWidth * 0.9)
     serverSizes.value[serverId].rightPanelWidth = Math.max(minWidth, Math.min(maxWidth, newWidth))
   }
 }
@@ -656,7 +698,43 @@ onMounted(() => {
   
   // 监听窗口大小变化
   resizeHandler = () => {
-    // 窗口大小变化时，可以调整默认值（如果需要）
+    // 窗口大小变化时，调整各个区域的尺寸，确保不超出窗口
+    const windowWidth = window.innerWidth
+    const windowHeight = window.innerHeight
+    const serverListWidth = getServerListWidth()
+    const buttonBarWidth = 40
+    const headerHeight = 36
+    
+    // 更新所有服务器的尺寸配置
+    Object.keys(serverSizes.value).forEach(serverId => {
+      const config = serverSizes.value[serverId]
+      
+      // 调整左侧区域宽度
+      const availableWidth = windowWidth - serverListWidth - buttonBarWidth
+      const rightPanelWidth = config.rightPanelType ? config.rightPanelWidth : 0
+      const maxLeftWidth = availableWidth - rightPanelWidth - 4
+      if (config.width > maxLeftWidth) {
+        config.width = Math.max(200, maxLeftWidth)
+      }
+      
+      // 调整右侧面板宽度
+      if (config.rightPanelType) {
+        const maxRightWidth = availableWidth - config.width - 4
+        if (config.rightPanelWidth > maxRightWidth) {
+          config.rightPanelWidth = Math.max(200, maxRightWidth)
+        }
+      }
+      
+      // 调整终端高度
+      const availableHeight = windowHeight - headerHeight
+      const maxTerminalHeight = availableHeight * 0.8
+      if (config.terminalHeight > maxTerminalHeight) {
+        config.terminalHeight = Math.max(150, maxTerminalHeight)
+      }
+    })
+    
+    // 保存调整后的尺寸
+    saveServerSizes()
   }
   
   window.addEventListener('resize', resizeHandler)
@@ -723,7 +801,7 @@ function refreshFileManager(serverId) {
 
 /* 左侧区域（文件管理器和终端，上下结构） */
 .left-section {
-  min-width: 300px;
+  min-width: 200px;
   display: flex;
   flex-direction: column;
   background: var(--bg-primary);
@@ -734,7 +812,7 @@ function refreshFileManager(serverId) {
 
 /* 右侧区域（AI助手或监控，交替显示） */
 .right-section {
-  min-width: 300px;
+  min-width: 200px;
   max-width: 50vw;
   display: flex;
   flex-direction: column;
@@ -813,7 +891,7 @@ function refreshFileManager(serverId) {
 
 /* 文件管理器（左侧下方，可调整高度，可收起） */
 .filemanager-section {
-  min-height: 200px;
+  min-height: 150px;
   max-height: 70vh;
   display: flex;
   flex-direction: column;
@@ -1114,34 +1192,148 @@ function refreshFileManager(serverId) {
   .filemanager-section {
     min-width: 200px;
   }
+  
+  .left-section {
+    min-width: 200px;
+  }
+  
+  .right-section {
+    min-width: 200px;
+  }
 }
 
 @media (max-width: 900px) {
+  .workspace-container {
+    flex-direction: column;
+  }
+  
+  .main-content-section {
+    width: 100% !important;
+    flex-direction: column;
+  }
+  
   .left-section {
     width: 100% !important;
     min-width: unset;
     max-width: unset;
   }
   
-  .filemanager-section {
-    height: 40% !important;
-    min-height: 200px;
+  .right-section {
+    width: 100% !important;
+    min-width: unset;
+    max-width: 100%;
+    max-height: 50vh;
   }
   
-  .terminal-section {
-    height: 60% !important;
+  .filemanager-section {
+    min-height: 150px;
   }
   
   .vertical-resizer {
     display: none;
   }
   
-  .monitor-section {
-    min-width: 250px;
+  .horizontal-resizer {
+    display: block;
   }
   
-  .monitor-collapsed {
-    width: 30px;
+  .right-panel-collapsed {
+    width: 100%;
+    height: 40px;
+    flex-direction: row;
+    justify-content: center;
+    border-left: none;
+    border-top: 1px solid var(--border-color);
+  }
+  
+  .monitor-section {
+    min-width: unset;
+  }
+}
+
+@media (max-width: 768px) {
+  .server-tabs-header {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  .server-tab {
+    min-width: 100px;
+    padding: 6px 10px;
+  }
+  
+  .server-tab-name {
+    font-size: 11px;
+  }
+  
+  .section-header {
+    padding: 6px 10px;
+  }
+  
+  .section-header h3 {
+    font-size: 12px;
+  }
+  
+  .action-btn {
+    font-size: 10px;
+    padding: 3px 6px;
+  }
+  
+  .left-section {
+    min-width: unset;
+  }
+  
+  .right-section {
+    min-width: unset;
+  }
+  
+  .filemanager-section {
+    min-height: 120px;
+  }
+}
+
+@media (max-width: 480px) {
+  .server-tabs-header {
+    min-height: 32px;
+  }
+  
+  .server-tab {
+    min-width: 80px;
+    padding: 4px 8px;
+    gap: 4px;
+  }
+  
+  .server-tab-icon {
+    font-size: 12px;
+  }
+  
+  .server-tab-name {
+    font-size: 10px;
+  }
+  
+  .section-header {
+    padding: 4px 8px;
+  }
+  
+  .section-header h3 {
+    font-size: 11px;
+  }
+  
+  .action-btn {
+    font-size: 9px;
+    padding: 2px 4px;
+  }
+  
+  .expand-btn {
+    width: 28px;
+    height: 28px;
+    font-size: 16px;
+  }
+  
+  .right-panel-collapsed {
+    height: 36px;
+    padding: 4px 0;
+    gap: 4px;
   }
 }
 </style>

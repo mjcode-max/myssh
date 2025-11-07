@@ -231,8 +231,8 @@
 
 <script setup>
 import { ref, watch, onMounted, computed, nextTick } from 'vue'
-import { invoke } from '@tauri-apps/api/tauri'
 import { open, save as saveFile } from '@tauri-apps/api/dialog'
+import { listRemoteDirectory, uploadFile, downloadFile, createDirectory, deleteFiles, renameFile, changeFileMode } from '@/api/file'
 import FilePreview from './FilePreview.vue'
 import FileCompare from './FileCompare.vue'
 import ConfirmDialog from './ConfirmDialog.vue'
@@ -313,28 +313,20 @@ async function loadFiles() {
   error.value = null
 
   try {
-    // TODO: 调用 Tauri 获取远程目录文件列表
-    // 接口: invoke('list_remote_directory', { serverId: props.server.id, path: currentPath.value })
-    // 返回格式: { files: [{ name, type, size, modified, path }] }
+    // 调用 Tauri API 获取远程目录文件列表
+    const result = await listRemoteDirectory({
+      serverId: props.server.id,
+      path: currentPath.value
+    })
     
-    // 临时模拟数据，实际应该调用 Tauri
-    const mockFiles = [
-      { name: '..', type: 'directory', size: 0, modified: new Date(), path: getParentPath() },
-      { name: 'home', type: 'directory', size: 0, modified: new Date(), path: currentPath.value + '/home' },
-      { name: 'etc', type: 'directory', size: 0, modified: new Date(), path: currentPath.value + '/etc' },
-      { name: 'var', type: 'directory', size: 0, modified: new Date(), path: currentPath.value + '/var' },
-      { name: 'readme.txt', type: 'file', size: 1024, modified: new Date(), path: currentPath.value + '/readme.txt' },
-      { name: 'config.json', type: 'file', size: 2048, modified: new Date(), path: currentPath.value + '/config.json' }
-    ]
-
-    // 实际调用应该是：
-    // const result = await invoke('list_remote_directory', {
-    //   serverId: props.server.id,
-    //   path: currentPath.value
-    // })
-    // files.value = result.files || []
-
-    files.value = mockFiles
+    // 转换文件格式，添加前端需要的字段
+    files.value = (result.files || []).map(file => ({
+      ...file,
+      type: file.type === 'directory' ? 'directory' : 'file',
+      permissions: file.permissions || '---',
+      editing: false,
+      newName: ''
+    }))
   } catch (err) {
     error.value = err.message || '获取文件列表失败'
     console.error('加载文件列表失败:', err)
@@ -589,8 +581,12 @@ async function confirmRename(file) {
       ? currentPath.value + file.newName.trim()
       : currentPath.value + '/' + file.newName.trim()
     
-    // TODO: 调用 Tauri 重命名文件
-    // await invoke('rename_remote_file', {
+    // 调用 Tauri API 重命名文件
+    await renameFile({
+      serverId: props.server.id,
+      oldPath: oldPath,
+      newPath: newPath
+    })
     //   serverId: props.server.id,
     //   oldPath: oldPath,
     //   newPath: newPath
@@ -699,8 +695,12 @@ async function confirmChmod() {
     error.value = null
     const filePath = chmodFile.value.path || (currentPath.value.endsWith('/') ? currentPath.value + chmodFile.value.name : currentPath.value + '/' + chmodFile.value.name)
     
-    // TODO: 调用 Tauri 设置文件权限
-    // await invoke('set_file_permissions', {
+    // 调用 Tauri API 设置文件权限
+    await changeFileMode({
+      serverId: props.server.id,
+      path: filePath,
+      mode: chmodValue.value
+    })
     //   serverId: props.server.id,
     //   filePath: filePath,
     //   permissions: parseInt(chmodValue.value, 8)
@@ -777,28 +777,27 @@ async function uploadFiles(filePaths) {
   error.value = null
 
   try {
-    // TODO: 调用 Tauri 上传文件
-    // 接口: invoke('upload_files', { 
-    //   serverId: props.server.id, 
-    //   localPaths: filePaths,
-    //   remotePath: currentPath.value 
-    // })
-    
-    // 实际调用应该是：
-    // for (const localPath of filePaths) {
-    //   await invoke('upload_file', {
-    //     serverId: props.server.id,
-    //     localPath: localPath,
-    //     remotePath: currentPath.value
-    //   })
-    // }
-
-    // 临时提示，实际应该调用 Tauri
-    console.log('上传文件:', filePaths, '到:', currentPath.value)
-    info(`准备上传 ${filePaths.length} 个文件到 ${currentPath.value}\n（将调用 Tauri 实现）`)
+    // 调用 Tauri API 上传文件
+    let successCount = 0
+    for (const localPath of filePaths) {
+      try {
+        await uploadFile({
+          serverId: props.server.id,
+          localPath: localPath,
+          remotePath: currentPath.value
+        })
+        successCount++
+      } catch (err) {
+        console.error(`上传文件失败 ${localPath}:`, err)
+      }
+    }
 
     // 上传成功后刷新文件列表
-    success(`成功上传 ${filePaths.length} 个文件`)
+    if (successCount > 0) {
+      success(`成功上传 ${successCount} 个文件`)
+    } else {
+      showError('上传失败')
+    }
     await loadFiles()
   } catch (err) {
     error.value = err.message || '文件上传失败'
@@ -898,40 +897,44 @@ async function handleDownload() {
     loading.value = true
     error.value = null
 
-    // TODO: 调用 Tauri 下载文件
-    // 接口: invoke('download_files', {
-    //   serverId: props.server.id,
-    //   remotePaths: selectedFiles.value,
-    //   localPath: savePath
-    // })
-
-    // 实际调用应该是：
-    // if (selectedFiles.value.length === 1) {
-    //   // 单个文件直接保存
-    //   await invoke('download_file', {
-    //     serverId: props.server.id,
-    //     remotePath: selectedFiles.value[0],
-    //     localPath: savePath
-    //   })
-    // } else {
-    //   // 多个文件保存到文件夹
-    //   for (const remotePath of selectedFiles.value) {
-    //     const fileName = remotePath.split('/').pop()
-    //     const localFilePath = savePath + '/' + fileName
-    //     await invoke('download_file', {
-    //       serverId: props.server.id,
-    //       remotePath: remotePath,
-    //       localPath: localFilePath
-    //     })
-    //   }
-    // }
-
-    // 临时提示，实际应该调用 Tauri
-    console.log('下载文件:', selectedFiles.value, '到:', savePath)
-    info(`准备下载 ${selectedFiles.value.length} 个文件到 ${savePath}\n（将调用 Tauri 实现）`)
+    // 调用 Tauri API 下载文件
+    let successCount = 0
+    if (selectedFiles.value.length === 1) {
+      // 单个文件直接保存
+      try {
+        await downloadFile({
+          serverId: props.server.id,
+          remotePath: selectedFiles.value[0],
+          localPath: savePath
+        })
+        successCount++
+      } catch (err) {
+        console.error('下载文件失败:', err)
+      }
+    } else {
+      // 多个文件保存到文件夹
+      for (const remotePath of selectedFiles.value) {
+        try {
+          const fileName = remotePath.split('/').pop()
+          const localFilePath = savePath + '/' + fileName
+          await downloadFile({
+            serverId: props.server.id,
+            remotePath: remotePath,
+            localPath: localFilePath
+          })
+          successCount++
+        } catch (err) {
+          console.error(`下载文件失败 ${remotePath}:`, err)
+        }
+      }
+    }
 
     // 下载成功后清空选择
-    success(`成功下载 ${selectedFiles.value.length} 个文件`)
+    if (successCount > 0) {
+      success(`成功下载 ${successCount} 个文件`)
+    } else {
+      showError('下载失败')
+    }
     selectedFiles.value = []
   } catch (err) {
     error.value = err.message || '文件下载失败'
@@ -962,21 +965,11 @@ async function handleNewFolder() {
       ? currentPath.value + name.trim()
       : currentPath.value + '/' + name.trim()
 
-    // TODO: 调用 Tauri 创建文件夹
-    // 接口: invoke('create_directory', {
-    //   serverId: props.server.id,
-    //   path: folderPath
-    // })
-
-    // 实际调用应该是：
-    // await invoke('create_directory', {
-    //   serverId: props.server.id,
-    //   path: folderPath
-    // })
-
-    // 临时提示，实际应该调用 Tauri
-    console.log('创建文件夹:', folderPath)
-    info(`准备创建文件夹: ${folderPath}\n（将调用 Tauri 实现）`)
+    // 调用 Tauri API 创建文件夹
+    await createDirectory({
+      serverId: props.server.id,
+      path: folderPath
+    })
 
     // 创建成功后刷新文件列表
     success('文件夹创建成功')
@@ -1019,8 +1012,11 @@ async function performDelete() {
     loading.value = true
     error.value = null
 
-    // TODO: 调用 Tauri 删除文件
-    // 接口: invoke('delete_files', {
+    // 调用 Tauri API 删除文件
+    await deleteFiles({
+      serverId: props.server.id,
+      paths: pathsToDelete
+    })
     //   serverId: props.server.id,
     //   paths: selectedFiles.value
     // })

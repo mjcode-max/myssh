@@ -122,23 +122,22 @@ async function handleCommand() {
 
 async function executeCommand(command) {
   try {
-    // TODO: 调用 Tauri 执行 SSH 命令
-    // const result = await invoke('execute_ssh_command', {
-    //   serverId: props.server.id,
-    //   command: command
-    // })
+    // 调用 Tauri API 执行 SSH 命令
+    const { executeSshCommand } = await import('@/api/ssh')
+    const result = await executeSshCommand({
+      serverId: props.server.id,
+      command: command
+    })
     
     // 录制输出
     if (props.isRecording) {
-      emit('record', { type: 'output', content: `执行命令: ${command}` })
+      emit('record', { type: 'output', content: result.output })
     }
 
-    // 模拟命令执行
-    const mockOutput = `执行命令: ${command}\n[这是模拟输出，实际将调用 Tauri 执行 SSH 命令]`
-    
+    // 显示命令输出
     outputLines.value.push({
       type: 'output',
-      content: mockOutput,
+      content: result.output,
       prompt: ''
     })
   } catch (error) {

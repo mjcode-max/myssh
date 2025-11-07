@@ -20,7 +20,10 @@ import WorkspaceTabs from '@/components/WorkspaceTabs.vue'
   display: flex;
   width: 100%;
   height: 100vh;
+  min-width: 320px;
+  min-height: 200px;
   overflow: hidden;
+  position: relative;
 }
 
 .workspace {
@@ -28,6 +31,22 @@ import WorkspaceTabs from '@/components/WorkspaceTabs.vue'
   display: flex;
   flex-direction: column;
   background: var(--bg-primary);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 小屏幕响应式 */
+@media (max-width: 768px) {
+  .main-layout {
+    flex-direction: column;
+  }
+  
+  .workspace {
+    min-height: 0;
+    height: auto;
+    flex: 1;
+  }
 }
 </style>
 

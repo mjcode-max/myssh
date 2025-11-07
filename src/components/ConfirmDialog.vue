@@ -104,7 +104,7 @@ watch(() => props.visible, (visible) => {
 
 .confirm-dialog {
   width: 400px;
-  max-width: 90vw;
+  max-width: calc(100vw - 40px);
 }
 
 /* 对话框头部 */
@@ -209,6 +209,79 @@ watch(() => props.visible, (visible) => {
 .confirm-btn.danger:hover {
   background: #d65e4a;
   border-color: #d65e4a;
+}
+
+/* 响应式优化 */
+@media (max-width: 768px) {
+  .confirm-dialog {
+    width: calc(100vw - 20px);
+    max-width: calc(100vw - 20px);
+    margin: 10px;
+  }
+  
+  .dialog-header {
+    padding: 12px;
+  }
+  
+  .dialog-header h3 {
+    font-size: 14px;
+  }
+  
+  .dialog-body {
+    padding: 12px;
+  }
+  
+  .confirm-message {
+    font-size: 13px;
+  }
+  
+  .dialog-footer {
+    padding: 12px;
+    flex-wrap: wrap;
+  }
+  
+  .cancel-btn,
+  .confirm-btn {
+    padding: 6px 12px;
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 480px) {
+  .confirm-dialog {
+    width: calc(100vw - 16px);
+    max-width: calc(100vw - 16px);
+    margin: 8px;
+  }
+  
+  .dialog-header {
+    padding: 10px;
+  }
+  
+  .dialog-header h3 {
+    font-size: 13px;
+  }
+  
+  .dialog-body {
+    padding: 10px;
+  }
+  
+  .confirm-message {
+    font-size: 12px;
+  }
+  
+  .dialog-footer {
+    padding: 10px;
+    gap: 6px;
+  }
+  
+  .cancel-btn,
+  .confirm-btn {
+    padding: 5px 10px;
+    font-size: 12px;
+    flex: 1;
+    min-width: 80px;
+  }
 }
 </style>
 

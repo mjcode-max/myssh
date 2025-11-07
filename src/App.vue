@@ -23,7 +23,11 @@ onMounted(() => {
 #app {
   width: 100%;
   height: 100vh;
+  min-width: 320px;
+  min-height: 200px;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 </style>
 

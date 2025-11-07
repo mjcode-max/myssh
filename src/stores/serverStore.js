@@ -1,13 +1,30 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
+import { connectSshServer, disconnectSshServer } from '@/api/ssh'
+import { saveServer, deleteServer, getServers } from '@/api/server'
 
 export const useServerStore = defineStore('server', () => {
   const servers = ref([])
   const activeServerId = ref(null)
   const activeTabId = ref(null)
 
+  // 初始化：从后端加载服务器列表
+  async function loadServers() {
+    try {
+      const result = await getServers()
+      // 将后端返回的服务器配置转换为前端格式
+      servers.value = result.map(server => ({
+        ...server,
+        connected: false,
+        tabs: []
+      }))
+    } catch (error) {
+      console.error('加载服务器列表失败:', error)
+    }
+  }
+
   // 添加服务器
-  function addServer(server) {
+  async function addServer(server) {
     const newServer = {
       id: Date.now().toString(),
       name: server.name || `${server.host}:${server.port}`,
@@ -19,17 +36,40 @@ export const useServerStore = defineStore('server', () => {
       connected: false,
       tabs: []
     }
-    servers.value.push(newServer)
-    return newServer.id
+    
+    try {
+      // 保存到后端
+      await saveServer(newServer)
+      servers.value.push(newServer)
+      return newServer.id
+    } catch (error) {
+      console.error('保存服务器配置失败:', error)
+      throw error
+    }
   }
 
   // 删除服务器
-  function removeServer(serverId) {
+  async function removeServer(serverId) {
     const index = servers.value.findIndex(s => s.id === serverId)
     if (index > -1) {
-      servers.value.splice(index, 1)
-      if (activeServerId.value === serverId) {
-        activeServerId.value = null
+      try {
+        // 如果已连接，先断开连接
+        const server = servers.value[index]
+        if (server.connected) {
+          await disconnectServer(serverId)
+        }
+        
+        // 从后端删除
+        await deleteServer(serverId)
+        
+        // 从列表中删除
+        servers.value.splice(index, 1)
+        if (activeServerId.value === serverId) {
+          activeServerId.value = null
+        }
+      } catch (error) {
+        console.error('删除服务器失败:', error)
+        throw error
       }
     }
   }
@@ -38,9 +78,23 @@ export const useServerStore = defineStore('server', () => {
   async function connectServer(serverId) {
     const server = servers.value.find(s => s.id === serverId)
     if (server) {
-      // TODO: 调用 Tauri 连接逻辑
-      server.connected = true
-      activeServerId.value = serverId
+      try {
+        // 调用 Tauri API 连接服务器
+        await connectSshServer({
+          serverId: server.id,
+          host: server.host,
+          port: server.port,
+          username: server.username,
+          password: server.password,
+          keyPath: server.keyPath
+        })
+        
+        server.connected = true
+        activeServerId.value = serverId
+      } catch (error) {
+        console.error('连接服务器失败:', error)
+        throw error
+      }
     }
   }
 
@@ -48,13 +102,20 @@ export const useServerStore = defineStore('server', () => {
   async function disconnectServer(serverId) {
     const server = servers.value.find(s => s.id === serverId)
     if (server) {
-      // TODO: 调用 Tauri 断开逻辑
-      server.connected = false
-      // 清理所有标签页
-      server.tabs = []
-      if (activeServerId.value === serverId) {
-        activeServerId.value = null
-        activeTabId.value = null
+      try {
+        // 调用 Tauri API 断开连接
+        await disconnectSshServer(serverId)
+        
+        server.connected = false
+        // 清理所有标签页
+        server.tabs = []
+        if (activeServerId.value === serverId) {
+          activeServerId.value = null
+          activeTabId.value = null
+        }
+      } catch (error) {
+        console.error('断开服务器失败:', error)
+        throw error
       }
     }
   }
@@ -98,6 +159,7 @@ export const useServerStore = defineStore('server', () => {
     servers,
     activeServerId,
     activeTabId,
+    loadServers,
     addServer,
     removeServer,
     connectServer,

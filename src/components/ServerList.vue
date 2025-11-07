@@ -1,5 +1,5 @@
 <template>
-  <div class="server-list" :class="{ collapsed: isCollapsed }">
+  <div class="server-list" :class="{ collapsed: isCollapsed }" :style="{ width: isCollapsed ? '40px' : serverListWidth + 'px' }">
     <!-- 展开状态 -->
     <template v-if="!isCollapsed">
       <div class="server-list-header">
@@ -153,7 +153,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useServerStore } from '@/stores/serverStore'
 import ConfirmDialog from './ConfirmDialog.vue'
 import { error, success } from '@/utils/toast'
@@ -164,6 +164,7 @@ const servers = computed(() => store.servers)
 const activeServerId = computed(() => store.activeServerId)
 const showAddDialog = ref(false)
 const isCollapsed = ref(false)
+const serverListWidth = ref(0) // 服务器列表宽度
 
 // 删除确认对话框
 const showDeleteConfirm = ref(false)
@@ -197,17 +198,40 @@ watch(showAddDialog, async (visible) => {
   }
 })
 
-// 从 localStorage 加载收起状态
+// 计算默认宽度（窗口宽度的28%，最小280px，最大600px）
+const getDefaultWidth = () => {
+  const windowWidth = window.innerWidth
+  const defaultWidth = Math.max(280, Math.min(600, windowWidth * 0.28))
+  return Math.round(defaultWidth)
+}
+
+// 从 localStorage 加载收起状态和宽度
 const loadCollapseState = () => {
   const saved = localStorage.getItem('serverListCollapsed')
   if (saved !== null) {
     isCollapsed.value = JSON.parse(saved)
   }
+  
+  // 加载保存的宽度
+  const savedWidth = localStorage.getItem('serverListWidth')
+  if (savedWidth !== null) {
+    const width = parseInt(savedWidth, 10)
+    if (width >= 200 && width <= 800) {
+      serverListWidth.value = width
+    } else {
+      serverListWidth.value = getDefaultWidth()
+    }
+  } else {
+    serverListWidth.value = getDefaultWidth()
+  }
 }
 
-// 保存收起状态
+// 保存收起状态和宽度
 const saveCollapseState = () => {
   localStorage.setItem('serverListCollapsed', JSON.stringify(isCollapsed.value))
+  if (!isCollapsed.value) {
+    localStorage.setItem('serverListWidth', serverListWidth.value.toString())
+  }
 }
 
 // 切换收起/展开
@@ -215,6 +239,27 @@ function toggleCollapse() {
   isCollapsed.value = !isCollapsed.value
   saveCollapseState()
 }
+
+// 调整宽度以适应窗口大小
+const adjustWidth = () => {
+  if (isCollapsed.value) return
+  
+  const windowWidth = window.innerWidth
+  const minWidth = 200
+  const maxWidth = Math.min(600, windowWidth * 0.4) // 最大不超过窗口的40%
+  
+  // 如果当前宽度超出范围，调整到合理范围
+  if (serverListWidth.value < minWidth) {
+    serverListWidth.value = minWidth
+  } else if (serverListWidth.value > maxWidth) {
+    serverListWidth.value = maxWidth
+  }
+  
+  saveCollapseState()
+}
+
+// 窗口大小变化监听
+let resizeHandler = null
 
 // 初始化时加载状态
 loadCollapseState()
@@ -367,22 +412,41 @@ function handleAddServer() {
   portError.value = ''
   showAddDialog.value = false
 }
+
+// 监听窗口大小变化
+onMounted(() => {
+  resizeHandler = () => {
+    adjustWidth()
+  }
+  window.addEventListener('resize', resizeHandler)
+  // 初始化时调整一次
+  adjustWidth()
+})
+
+onUnmounted(() => {
+  if (resizeHandler) {
+    window.removeEventListener('resize', resizeHandler)
+  }
+})
 </script>
 
 <style scoped>
 .server-list {
-  width: 360px;
+  min-width: 200px;
+  max-width: 50vw;
   background: var(--bg-secondary);
   border-right: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
   height: 100vh;
   transition: width 0.3s;
-  flex-shrink: 0;
+  flex-shrink: 1;
+  overflow: hidden;
 }
 
 .server-list.collapsed {
-  width: 40px;
+  min-width: 40px;
+  max-width: 40px;
 }
 
 .server-list-header {
@@ -591,8 +655,12 @@ function handleAddServer() {
   border: 1px solid var(--border-color);
   border-radius: 6px;
   width: 480px;
-  max-width: 90vw;
+  max-width: calc(100vw - 40px);
+  max-height: calc(100vh - 40px);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .dialog-header {
@@ -618,6 +686,9 @@ function handleAddServer() {
 
 .dialog-body {
   padding: 16px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
 }
 
 .form-group {
@@ -665,6 +736,77 @@ function handleAddServer() {
 
 .dialog-footer button.primary:hover {
   background: var(--accent-hover);
+}
+
+/* 响应式优化 */
+@media (max-width: 768px) {
+  .server-list {
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    max-height: 50vh;
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+  }
+  
+  .server-list.collapsed {
+    width: 100%;
+    min-width: 100%;
+    max-width: 100%;
+    height: 40px;
+  }
+  
+  .server-list-header {
+    padding: 12px 16px;
+  }
+  
+  .server-list-header h3 {
+    font-size: 16px;
+  }
+  
+  .server-item {
+    padding: 12px;
+  }
+  
+  .dialog {
+    width: calc(100vw - 20px);
+    max-width: calc(100vw - 20px);
+    margin: 10px;
+  }
+  
+  .dialog-body {
+    padding: 12px;
+  }
+  
+  .form-group {
+    margin-bottom: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .server-list {
+    max-height: 40vh;
+  }
+  
+  .server-list-header {
+    padding: 10px 12px;
+  }
+  
+  .server-list-header h3 {
+    font-size: 14px;
+  }
+  
+  .server-item {
+    padding: 10px 12px;
+  }
+  
+  .server-name {
+    font-size: 14px;
+  }
+  
+  .server-address {
+    font-size: 12px;
+  }
 }
 </style>
 

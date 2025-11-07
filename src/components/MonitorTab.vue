@@ -422,18 +422,10 @@ async function loadMonitorData() {
   }
 
   try {
-    // TODO: 调用 Tauri 获取监控数据
-    // 接口: invoke('get_system_monitor', { serverId: props.server.id })
-    // 返回格式: { cpu, memory, disk, network }
-
-    // 实际调用应该是：
-    // const data = await invoke('get_system_monitor', {
-    //   serverId: props.server.id
-    // })
-    // updateMonitorData(data)
-
-    // 临时模拟数据
-    updateMonitorData(getMockData())
+    // 调用 Tauri API 获取监控数据
+    const { getSystemMonitor } = await import('@/api/monitor')
+    const data = await getSystemMonitor(props.server.id)
+    updateMonitorData(data)
     
     lastUpdateTime.value = new Date().toLocaleTimeString('zh-CN')
   } catch (err) {
