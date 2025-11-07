@@ -13,10 +13,40 @@
         <button @click="handleRefresh" class="path-btn" title="刷新">🔄</button>
       </div>
       <div class="file-actions">
+        <input
+          v-model="searchText"
+          @input="handleSearch"
+          class="search-input"
+          placeholder="搜索文件..."
+        />
         <button @click="handleUpload" class="action-btn" title="上传文件">📤 上传</button>
         <button @click="handleDownload" class="action-btn" title="下载文件">📥 下载</button>
         <button @click="handleNewFolder" class="action-btn" title="新建文件夹">📁 新建</button>
+        <button 
+          v-if="selectedFiles.length > 0"
+          @click="handleRename" 
+          class="action-btn" 
+          title="重命名"
+        >
+          ✏️ 重命名
+        </button>
+        <button 
+          v-if="selectedFiles.length > 0"
+          @click="handleChmod" 
+          class="action-btn" 
+          title="权限"
+        >
+          🔒 权限
+        </button>
         <button @click="handleDelete" class="action-btn delete" title="删除">🗑️ 删除</button>
+        <button 
+          v-if="selectedFiles.length > 0"
+          @click="handleSelectAll" 
+          class="action-btn" 
+          title="全选/取消全选"
+        >
+          {{ selectedFiles.length === filteredFiles.length ? '☐ 全选' : '☑ 取消全选' }}
+        </button>
       </div>
     </div>
     
@@ -25,22 +55,38 @@
         <div class="file-col name">名称</div>
         <div class="file-col size">大小</div>
         <div class="file-col type">类型</div>
+        <div class="file-col permissions">权限</div>
         <div class="file-col date">修改时间</div>
       </div>
-      <div class="file-list" v-if="files.length > 0">
+      <div class="file-list" v-if="filteredFiles.length > 0">
         <div
-          v-for="file in files"
+          v-for="file in filteredFiles"
           :key="file.path || file.name"
           :class="['file-item', { selected: isFileSelected(file) }]"
-          @click="handleFileClick(file)"
+          @click="handleFileClick(file, $event)"
           @dblclick="handleFileDoubleClick(file)"
+          @contextmenu.prevent="handleContextMenu(file, $event)"
         >
           <div class="file-col name">
-            <span class="file-icon">{{ getFileIcon(file) }}</span>
-            <span class="file-name">{{ file.name }}</span>
+            <input
+              v-if="file.editing"
+              v-model="file.newName"
+              @keydown.enter="confirmRename(file)"
+              @keydown.esc="cancelRename(file)"
+              @blur="cancelRename(file)"
+              class="rename-input"
+              ref="renameInput"
+            />
+            <template v-else>
+              <span class="file-icon">{{ getFileIcon(file) }}</span>
+              <span class="file-name">{{ file.name }}</span>
+            </template>
           </div>
           <div class="file-col size">{{ formatSize(file.size) }}</div>
           <div class="file-col type">{{ file.type }}</div>
+          <div class="file-col permissions">
+            {{ file.permissions || '---' }}
+          </div>
           <div class="file-col date">{{ formatDate(file.modified) }}</div>
         </div>
       </div>
@@ -69,13 +115,114 @@
         </div>
       </div>
     </div>
+
+    <!-- 右键菜单 -->
+    <div 
+      v-if="contextMenu.show"
+      class="context-menu"
+      :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
+      @click.stop
+    >
+      <div class="context-menu-item" @click="handleContextRename">
+        ✏️ 重命名
+      </div>
+      <div class="context-menu-item" @click="handleContextChmod">
+        🔒 权限设置
+      </div>
+      <div class="context-menu-item" @click="handleContextPreview">
+        👁️ 预览
+      </div>
+      <div class="context-menu-item" @click="handleContextCompare">
+        🔍 对比
+      </div>
+      <div class="context-menu-divider"></div>
+      <div class="context-menu-item" @click="handleContextDownload">
+        📥 下载
+      </div>
+      <div class="context-menu-item" @click="handleContextDelete">
+        🗑️ 删除
+      </div>
+    </div>
+
+    <!-- 文件预览对话框 -->
+    <FilePreview
+      v-if="previewFile"
+      :show="!!previewFile"
+      :file="previewFile"
+      :server="server"
+      @close="previewFile = null"
+      @compare="handleCompareFromPreview"
+      @download="handleDownloadFromPreview"
+    />
+
+    <!-- 文件对比对话框 -->
+    <FileCompare
+      v-if="compareFiles.left && compareFiles.right"
+      :show="!!compareFiles.left && !!compareFiles.right"
+      :left-file="compareFiles.left"
+      :right-file="compareFiles.right"
+      :server="server"
+      @close="compareFiles = { left: null, right: null }"
+    />
+
+    <!-- 权限设置对话框 -->
+    <div v-if="showChmodDialog" class="chmod-dialog-overlay" @click.self="showChmodDialog = false">
+      <div class="chmod-dialog">
+        <div class="dialog-header">
+          <h3>设置文件权限</h3>
+          <button @click="showChmodDialog = false" class="close-btn">×</button>
+        </div>
+        <div class="dialog-body">
+          <div class="chmod-info">
+            <p>文件: {{ chmodFile?.name }}</p>
+            <p>当前权限: {{ chmodFile?.permissions || '---' }}</p>
+          </div>
+          <div class="chmod-input">
+            <label>八进制权限 (如: 755):</label>
+            <input v-model="chmodValue" type="text" placeholder="755" maxlength="3" />
+          </div>
+          <div class="chmod-bits">
+            <div class="chmod-group">
+              <label>所有者 (Owner)</label>
+              <div class="chmod-checkboxes">
+                <label><input type="checkbox" v-model="chmodBits.owner.read" /> 读</label>
+                <label><input type="checkbox" v-model="chmodBits.owner.write" /> 写</label>
+                <label><input type="checkbox" v-model="chmodBits.owner.execute" /> 执行</label>
+              </div>
+            </div>
+            <div class="chmod-group">
+              <label>组 (Group)</label>
+              <div class="chmod-checkboxes">
+                <label><input type="checkbox" v-model="chmodBits.group.read" /> 读</label>
+                <label><input type="checkbox" v-model="chmodBits.group.write" /> 写</label>
+                <label><input type="checkbox" v-model="chmodBits.group.execute" /> 执行</label>
+              </div>
+            </div>
+            <div class="chmod-group">
+              <label>其他 (Others)</label>
+              <div class="chmod-checkboxes">
+                <label><input type="checkbox" v-model="chmodBits.others.read" /> 读</label>
+                <label><input type="checkbox" v-model="chmodBits.others.write" /> 写</label>
+                <label><input type="checkbox" v-model="chmodBits.others.execute" /> 执行</label>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="dialog-footer">
+          <button @click="showChmodDialog = false">取消</button>
+          <button @click="confirmChmod" class="primary">确定</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, computed, nextTick } from 'vue'
 import { invoke } from '@tauri-apps/api/tauri'
 import { open, save as saveFile } from '@tauri-apps/api/dialog'
+import FilePreview from './FilePreview.vue'
+import FileCompare from './FileCompare.vue'
 
 const props = defineProps({
   tab: Object,
@@ -88,6 +235,31 @@ const selectedFiles = ref([]) // 存储选中文件的完整路径
 const loading = ref(false)
 const error = ref(null)
 const isDragOver = ref(false)
+const searchText = ref('')
+const contextMenu = ref({ show: false, x: 0, y: 0, file: null })
+const previewFile = ref(null)
+const compareFiles = ref({ left: null, right: null })
+const showChmodDialog = ref(false)
+const chmodFile = ref(null)
+const chmodValue = ref('')
+const chmodBits = ref({
+  owner: { read: false, write: false, execute: false },
+  group: { read: false, write: false, execute: false },
+  others: { read: false, write: false, execute: false }
+})
+const renameInput = ref(null)
+
+// 过滤后的文件列表
+const filteredFiles = computed(() => {
+  if (!searchText.value) {
+    return files.value
+  }
+  const search = searchText.value.toLowerCase()
+  return files.value.filter(file => 
+    file.name.toLowerCase().includes(search) ||
+    (file.path && file.path.toLowerCase().includes(search))
+  )
+})
 
 watch(() => props.server.connected, (connected) => {
   if (connected) {
@@ -193,15 +365,74 @@ function formatDate(date) {
   return new Date(date).toLocaleString('zh-CN')
 }
 
-function handleFileClick(file) {
-  if (file.name === '..') return
-  // 使用完整路径来标识文件，避免同名文件冲突
+function handleFileClick(file, event) {
+  if (file.name === '..' || file.editing) return
+  
+  // Ctrl/Cmd + 点击多选
+  if (event.ctrlKey || event.metaKey) {
+    toggleFileSelection(file)
+  } else if (event.shiftKey) {
+    // Shift + 点击范围选择
+    handleRangeSelection(file)
+  } else {
+    // 普通点击：单选或切换选择
+    if (!isFileSelected(file)) {
+      selectedFiles.value = []
+      toggleFileSelection(file)
+    }
+  }
+}
+
+function toggleFileSelection(file) {
   const filePath = file.path || (currentPath.value.endsWith('/') ? currentPath.value + file.name : currentPath.value + '/' + file.name)
   const index = selectedFiles.value.indexOf(filePath)
   if (index > -1) {
     selectedFiles.value.splice(index, 1)
   } else {
     selectedFiles.value.push(filePath)
+  }
+}
+
+function handleRangeSelection(file) {
+  const currentIndex = filteredFiles.value.findIndex(f => 
+    (f.path || (currentPath.value.endsWith('/') ? currentPath.value + f.name : currentPath.value + '/' + f.name)) === 
+    (file.path || (currentPath.value.endsWith('/') ? currentPath.value + file.name : currentPath.value + '/' + file.name))
+  )
+  
+  if (currentIndex === -1) return
+  
+  // 找到最后一个选中的文件
+  let lastSelectedIndex = -1
+  for (let i = filteredFiles.value.length - 1; i >= 0; i--) {
+    if (isFileSelected(filteredFiles.value[i])) {
+      lastSelectedIndex = i
+      break
+    }
+  }
+  
+  if (lastSelectedIndex === -1) {
+    toggleFileSelection(file)
+    return
+  }
+  
+  const start = Math.min(lastSelectedIndex, currentIndex)
+  const end = Math.max(lastSelectedIndex, currentIndex)
+  
+  for (let i = start; i <= end; i++) {
+    const f = filteredFiles.value[i]
+    if (f.name !== '..' && !isFileSelected(f)) {
+      toggleFileSelection(f)
+    }
+  }
+}
+
+function handleSelectAll() {
+  if (selectedFiles.value.length === filteredFiles.value.filter(f => f.name !== '..').length) {
+    selectedFiles.value = []
+  } else {
+    selectedFiles.value = filteredFiles.value
+      .filter(f => f.name !== '..')
+      .map(f => f.path || (currentPath.value.endsWith('/') ? currentPath.value + f.name : currentPath.value + '/' + f.name))
   }
 }
 
@@ -220,9 +451,267 @@ function handleFileDoubleClick(file) {
       // loadFiles 会在 watch currentPath 时自动调用
     }
   } else {
-    // TODO: 打开文件（可以调用 Tauri 在终端中打开或下载预览）
-    alert(`打开文件: ${file.name}`)
+    // 预览文件
+    previewFile.value = file
   }
+}
+
+// 右键菜单
+function handleContextMenu(file, event) {
+  if (file.name === '..') return
+  contextMenu.value = {
+    show: true,
+    x: event.clientX,
+    y: event.clientY,
+    file: file
+  }
+  
+  // 点击其他地方关闭菜单
+  setTimeout(() => {
+    document.addEventListener('click', closeContextMenu, { once: true })
+  }, 0)
+}
+
+function closeContextMenu() {
+  contextMenu.value.show = false
+}
+
+function handleContextRename() {
+  if (contextMenu.value.file) {
+    handleRenameFile(contextMenu.value.file)
+  }
+  closeContextMenu()
+}
+
+function handleContextChmod() {
+  if (contextMenu.value.file) {
+    handleChmodFile(contextMenu.value.file)
+  }
+  closeContextMenu()
+}
+
+function handleContextPreview() {
+  if (contextMenu.value.file) {
+    previewFile.value = contextMenu.value.file
+  }
+  closeContextMenu()
+}
+
+function handleContextCompare() {
+  if (contextMenu.value.file) {
+    compareFiles.value.left = contextMenu.value.file
+    // 提示选择第二个文件
+    alert('请选择要对比的第二个文件')
+  }
+  closeContextMenu()
+}
+
+function handleContextDownload() {
+  if (contextMenu.value.file) {
+    selectedFiles.value = [contextMenu.value.file.path || (currentPath.value.endsWith('/') ? currentPath.value + contextMenu.value.file.name : currentPath.value + '/' + contextMenu.value.file.name)]
+    handleDownload()
+  }
+  closeContextMenu()
+}
+
+function handleContextDelete() {
+  if (contextMenu.value.file) {
+    selectedFiles.value = [contextMenu.value.file.path || (currentPath.value.endsWith('/') ? currentPath.value + contextMenu.value.file.name : currentPath.value + '/' + contextMenu.value.file.name)]
+    handleDelete()
+  }
+  closeContextMenu()
+}
+
+// 重命名
+function handleRename() {
+  if (selectedFiles.value.length === 1) {
+    const file = files.value.find(f => {
+      const filePath = f.path || (currentPath.value.endsWith('/') ? currentPath.value + f.name : currentPath.value + '/' + f.name)
+      return filePath === selectedFiles.value[0]
+    })
+    if (file) {
+      handleRenameFile(file)
+    }
+  } else {
+    alert('请选择一个文件进行重命名')
+  }
+}
+
+function handleRenameFile(file) {
+  file.editing = true
+  file.newName = file.name
+  nextTick(() => {
+    const input = renameInput.value
+    if (input && input.length > 0) {
+      input[0].focus()
+      input[0].select()
+    }
+  })
+}
+
+async function confirmRename(file) {
+  if (!file.newName || file.newName.trim() === '') {
+    cancelRename(file)
+    return
+  }
+  
+  if (file.newName === file.name) {
+    cancelRename(file)
+    return
+  }
+  
+  try {
+    loading.value = true
+    const oldPath = file.path || (currentPath.value.endsWith('/') ? currentPath.value + file.name : currentPath.value + '/' + file.name)
+    const newPath = currentPath.value.endsWith('/') 
+      ? currentPath.value + file.newName.trim()
+      : currentPath.value + '/' + file.newName.trim()
+    
+    // TODO: 调用 Tauri 重命名文件
+    // await invoke('rename_remote_file', {
+    //   serverId: props.server.id,
+    //   oldPath: oldPath,
+    //   newPath: newPath
+    // })
+    
+    console.log('重命名文件:', oldPath, '->', newPath)
+    alert(`准备重命名: ${oldPath} -> ${newPath}\n（将调用 Tauri 实现）`)
+    
+    file.name = file.newName.trim()
+    file.path = newPath
+    file.editing = false
+    await loadFiles()
+  } catch (err) {
+    error.value = err.message || '重命名失败'
+    alert('重命名失败: ' + error.value)
+    cancelRename(file)
+  } finally {
+    loading.value = false
+  }
+}
+
+function cancelRename(file) {
+  file.editing = false
+  file.newName = ''
+}
+
+// 权限设置
+function handleChmod() {
+  if (selectedFiles.value.length === 1) {
+    const file = files.value.find(f => {
+      const filePath = f.path || (currentPath.value.endsWith('/') ? currentPath.value + f.name : currentPath.value + '/' + f.name)
+      return filePath === selectedFiles.value[0]
+    })
+    if (file) {
+      handleChmodFile(file)
+    }
+  } else {
+    alert('请选择一个文件进行权限设置')
+  }
+}
+
+function handleChmodFile(file) {
+  chmodFile.value = file
+  chmodValue.value = file.permissions ? file.permissions.replace(/[^0-7]/g, '') : '644'
+  
+  // 解析权限位
+  if (chmodValue.value.length === 3) {
+    const owner = parseInt(chmodValue.value[0])
+    const group = parseInt(chmodValue.value[1])
+    const others = parseInt(chmodValue.value[2])
+    
+    chmodBits.value.owner.read = (owner & 4) !== 0
+    chmodBits.value.owner.write = (owner & 2) !== 0
+    chmodBits.value.owner.execute = (owner & 1) !== 0
+    
+    chmodBits.value.group.read = (group & 4) !== 0
+    chmodBits.value.group.write = (group & 2) !== 0
+    chmodBits.value.group.execute = (group & 1) !== 0
+    
+    chmodBits.value.others.read = (others & 4) !== 0
+    chmodBits.value.others.write = (others & 2) !== 0
+    chmodBits.value.others.execute = (others & 1) !== 0
+  }
+  
+  showChmodDialog.value = true
+}
+
+// 监听权限位变化，更新八进制值
+watch(chmodBits, (newBits) => {
+  const owner = (newBits.owner.read ? 4 : 0) + (newBits.owner.write ? 2 : 0) + (newBits.owner.execute ? 1 : 0)
+  const group = (newBits.group.read ? 4 : 0) + (newBits.group.write ? 2 : 0) + (newBits.group.execute ? 1 : 0)
+  const others = (newBits.others.read ? 4 : 0) + (newBits.others.write ? 2 : 0) + (newBits.others.execute ? 1 : 0)
+  chmodValue.value = `${owner}${group}${others}`
+}, { deep: true })
+
+// 监听八进制值变化，更新权限位
+watch(chmodValue, (newValue) => {
+  if (newValue.length === 3 && /^[0-7]{3}$/.test(newValue)) {
+    const owner = parseInt(newValue[0])
+    const group = parseInt(newValue[1])
+    const others = parseInt(newValue[2])
+    
+    chmodBits.value.owner.read = (owner & 4) !== 0
+    chmodBits.value.owner.write = (owner & 2) !== 0
+    chmodBits.value.owner.execute = (owner & 1) !== 0
+    
+    chmodBits.value.group.read = (group & 4) !== 0
+    chmodBits.value.group.write = (group & 2) !== 0
+    chmodBits.value.group.execute = (group & 1) !== 0
+    
+    chmodBits.value.others.read = (others & 4) !== 0
+    chmodBits.value.others.write = (others & 2) !== 0
+    chmodBits.value.others.execute = (others & 1) !== 0
+  }
+})
+
+async function confirmChmod() {
+  if (!chmodFile.value || !/^[0-7]{3}$/.test(chmodValue.value)) {
+    alert('请输入有效的权限值（三位八进制数，如：755）')
+    return
+  }
+  
+  try {
+    loading.value = true
+    const filePath = chmodFile.value.path || (currentPath.value.endsWith('/') ? currentPath.value + chmodFile.value.name : currentPath.value + '/' + chmodFile.value.name)
+    
+    // TODO: 调用 Tauri 设置文件权限
+    // await invoke('set_file_permissions', {
+    //   serverId: props.server.id,
+    //   filePath: filePath,
+    //   permissions: parseInt(chmodValue.value, 8)
+    // })
+    
+    console.log('设置文件权限:', filePath, '->', chmodValue.value)
+    alert(`准备设置权限: ${filePath} -> ${chmodValue.value}\n（将调用 Tauri 实现）`)
+    
+    chmodFile.value.permissions = chmodValue.value
+    showChmodDialog.value = false
+    await loadFiles()
+  } catch (err) {
+    error.value = err.message || '设置权限失败'
+    alert('设置权限失败: ' + error.value)
+  } finally {
+    loading.value = false
+  }
+}
+
+// 搜索
+function handleSearch() {
+  // 搜索逻辑已在 computed 中处理
+}
+
+// 文件对比
+function handleCompareFromPreview(file) {
+  compareFiles.value.left = previewFile.value
+  compareFiles.value.right = file
+  previewFile.value = null
+}
+
+function handleDownloadFromPreview(file) {
+  selectedFiles.value = [file.path || (currentPath.value.endsWith('/') ? currentPath.value + file.name : currentPath.value + '/' + file.name)]
+  handleDownload()
+  previewFile.value = null
 }
 
 function handleNavigate() {
@@ -612,8 +1101,200 @@ async function handleDelete() {
   width: 80px;
 }
 
+.file-col.permissions {
+  width: 80px;
+  font-family: 'Consolas', monospace;
+  font-size: 11px;
+}
+
 .file-col.date {
   width: 180px;
+}
+
+.search-input {
+  flex: 1;
+  padding: 4px 8px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  color: var(--text-primary);
+  font-size: 12px;
+  margin-right: 8px;
+}
+
+.rename-input {
+  flex: 1;
+  padding: 2px 4px;
+  background: var(--bg-primary);
+  border: 1px solid var(--accent-color);
+  border-radius: 2px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.context-menu {
+  position: fixed;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 1000;
+  min-width: 150px;
+  padding: 4px 0;
+}
+
+.context-menu-item {
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-primary);
+  transition: background 0.2s;
+}
+
+.context-menu-item:hover {
+  background: var(--bg-hover);
+}
+
+.context-menu-divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 4px 0;
+}
+
+.chmod-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.chmod-dialog {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  width: 500px;
+  max-width: 90vw;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.dialog-header {
+  padding: 16px;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.dialog-header h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.dialog-body {
+  padding: 16px;
+}
+
+.chmod-info {
+  margin-bottom: 16px;
+  padding: 12px;
+  background: var(--bg-primary);
+  border-radius: 4px;
+}
+
+.chmod-info p {
+  margin: 4px 0;
+  font-size: 13px;
+}
+
+.chmod-input {
+  margin-bottom: 16px;
+}
+
+.chmod-input label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.chmod-input input {
+  width: 100%;
+  padding: 6px 8px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: 'Consolas', monospace;
+}
+
+.chmod-bits {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.chmod-group {
+  padding: 12px;
+  background: var(--bg-primary);
+  border-radius: 4px;
+}
+
+.chmod-group label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.chmod-checkboxes {
+  display: flex;
+  gap: 16px;
+}
+
+.chmod-checkboxes label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: normal;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.chmod-checkboxes input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+}
+
+.dialog-footer {
+  padding: 16px;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.dialog-footer button {
+  padding: 6px 16px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.dialog-footer button.primary {
+  background: var(--accent-color);
+  color: white;
+  border-color: var(--accent-color);
 }
 
 .file-list {

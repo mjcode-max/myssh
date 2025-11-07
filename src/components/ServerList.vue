@@ -1,13 +1,18 @@
 <template>
-  <div class="server-list">
-    <div class="server-list-header">
-      <h3>服务器列表</h3>
-      <button class="add-btn" @click="showAddDialog = true" title="添加服务器">
-        <span class="icon">+</span>
-      </button>
-    </div>
-    
-    <div class="server-items">
+  <div class="server-list" :class="{ collapsed: isCollapsed }">
+    <!-- 展开状态 -->
+    <template v-if="!isCollapsed">
+      <div class="server-list-header">
+        <h3>服务器列表</h3>
+        <div class="header-actions">
+          <button class="add-btn" @click="showAddDialog = true" title="添加服务器">
+            <span class="icon">+</span>
+          </button>
+          <button class="collapse-btn" @click="toggleCollapse" title="收起">◀</button>
+        </div>
+      </div>
+      
+      <div class="server-items">
       <div
         v-for="server in servers"
         :key="server.id"
@@ -49,6 +54,14 @@
           </button>
         </div>
       </div>
+    </div>
+    </template>
+
+    <!-- 收起状态 -->
+    <div v-else class="server-list-collapsed">
+      <button class="expand-btn" @click="toggleCollapse" title="展开服务器列表">
+        🖥️
+      </button>
     </div>
 
     <!-- 添加服务器对话框 -->
@@ -97,6 +110,29 @@ const store = useServerStore()
 const servers = computed(() => store.servers)
 const activeServerId = computed(() => store.activeServerId)
 const showAddDialog = ref(false)
+const isCollapsed = ref(false)
+
+// 从 localStorage 加载收起状态
+const loadCollapseState = () => {
+  const saved = localStorage.getItem('serverListCollapsed')
+  if (saved !== null) {
+    isCollapsed.value = JSON.parse(saved)
+  }
+}
+
+// 保存收起状态
+const saveCollapseState = () => {
+  localStorage.setItem('serverListCollapsed', JSON.stringify(isCollapsed.value))
+}
+
+// 切换收起/展开
+function toggleCollapse() {
+  isCollapsed.value = !isCollapsed.value
+  saveCollapseState()
+}
+
+// 初始化时加载状态
+loadCollapseState()
 
 const newServer = ref({
   name: '',
@@ -152,48 +188,113 @@ function handleAddServer() {
 
 <style scoped>
 .server-list {
-  width: 280px;
+  width: 360px;
   background: var(--bg-secondary);
   border-right: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
   height: 100vh;
+  transition: width 0.3s;
+  flex-shrink: 0;
+}
+
+.server-list.collapsed {
+  width: 40px;
 }
 
 .server-list-header {
-  padding: 12px 16px;
+  padding: 16px 20px;
   border-bottom: 1px solid var(--border-color);
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
-.server-list-header h3 {
-  font-size: 14px;
-  font-weight: 600;
+.header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 
-.add-btn {
-  width: 24px;
-  height: 24px;
+.collapse-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.collapse-btn:hover {
+  background: var(--bg-hover);
+}
+
+/* 收起状态 */
+.server-list-collapsed {
+  width: 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-color);
+  padding: 8px 0;
+  gap: 8px;
+}
+
+.expand-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  font-size: 18px;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 0.2s;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 4px;
+}
+
+.expand-btn:hover {
+  background: var(--bg-hover);
+}
+
+.server-list-header h3 {
   font-size: 18px;
+  font-weight: 600;
+}
+
+.add-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  font-size: 22px;
   line-height: 1;
 }
 
 .server-items {
   flex: 1;
   overflow-y: auto;
-  padding: 8px;
+  padding: 12px;
 }
 
 .server-item {
-  padding: 10px 12px;
-  margin-bottom: 4px;
-  border-radius: 4px;
+  padding: 14px 16px;
+  margin-bottom: 6px;
+  border-radius: 6px;
   cursor: pointer;
   transition: background 0.2s;
   display: flex;
@@ -221,12 +322,12 @@ function handleAddServer() {
 }
 
 .server-status {
-  margin-right: 8px;
+  margin-right: 12px;
 }
 
 .status-dot {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   display: inline-block;
 }
@@ -246,16 +347,16 @@ function handleAddServer() {
 }
 
 .server-name {
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 500;
-  margin-bottom: 2px;
+  margin-bottom: 4px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .server-address {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
@@ -264,7 +365,7 @@ function handleAddServer() {
 
 .server-actions {
   display: flex;
-  gap: 4px;
+  gap: 6px;
   opacity: 0;
   transition: opacity 0.2s;
 }
@@ -274,10 +375,10 @@ function handleAddServer() {
 }
 
 .action-btn {
-  width: 20px;
-  height: 20px;
+  width: 28px;
+  height: 28px;
   padding: 0;
-  font-size: 12px;
+  font-size: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
