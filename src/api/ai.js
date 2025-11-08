@@ -15,9 +15,11 @@ import { invoke } from '@tauri-apps/api/tauri'
 export async function chatWithAi(params) {
   try {
     const result = await invoke('chat_with_ai', {
-      serverId: params.serverId,
-      question: params.question,
-      history: params.history || []
+      params: {
+        server_id: params.serverId,
+        question: params.question,
+        history: params.history || []
+      }
     })
     return result
   } catch (error) {
@@ -34,7 +36,9 @@ export async function chatWithAi(params) {
 export async function getAiQuickActions(serverId) {
   try {
     const result = await invoke('get_ai_quick_actions', {
-      serverId: serverId
+      params: {
+        server_id: serverId
+      }
     })
     return result
   } catch (error) {

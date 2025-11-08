@@ -58,7 +58,7 @@
         "fullscreen": false,
         "height": 600,
         "resizable": true,
-        "title": "myssh",
+        "title": "MySSH - 远程服务器运维工具",
         "width": 800
       }
     ]

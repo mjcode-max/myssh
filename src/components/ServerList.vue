@@ -3,12 +3,30 @@
     <!-- 展开状态 -->
     <template v-if="!isCollapsed">
       <div class="server-list-header">
-        <h3>服务器列表</h3>
+        <div class="header-title">
+          <div class="app-logo">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div class="app-title">
+            <span class="app-name">MySSH</span>
+            <span class="app-subtitle">服务器管理</span>
+          </div>
+        </div>
         <div class="header-actions">
           <button class="add-btn" @click="showAddDialog = true" title="添加服务器">
-            <span class="icon">+</span>
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
           </button>
-          <button class="collapse-btn" @click="toggleCollapse" title="收起">◀</button>
+          <button class="collapse-btn" @click="toggleCollapse" title="收起">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M15 18L9 12L15 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
         </div>
       </div>
       
@@ -60,7 +78,11 @@
     <!-- 收起状态 -->
     <div v-else class="server-list-collapsed">
       <button class="expand-btn" @click="toggleCollapse" title="展开服务器列表">
-        🖥️
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
       </button>
     </div>
 
@@ -165,6 +187,7 @@ const activeServerId = computed(() => store.activeServerId)
 const showAddDialog = ref(false)
 const isCollapsed = ref(false)
 const serverListWidth = ref(0) // 服务器列表宽度
+const autoCollapsed = ref(false) // 是否是自动收起的
 
 // 删除确认对话框
 const showDeleteConfirm = ref(false)
@@ -198,25 +221,33 @@ watch(showAddDialog, async (visible) => {
   }
 })
 
-// 计算默认宽度（窗口宽度的28%，最小280px，最大600px）
+// 计算默认宽度（窗口宽度的35%，最小320px，最大800px）
 const getDefaultWidth = () => {
   const windowWidth = window.innerWidth
-  const defaultWidth = Math.max(280, Math.min(600, windowWidth * 0.28))
+  const defaultWidth = Math.max(320, Math.min(800, windowWidth * 0.35))
   return Math.round(defaultWidth)
 }
 
 // 从 localStorage 加载收起状态和宽度
 const loadCollapseState = () => {
-  const saved = localStorage.getItem('serverListCollapsed')
-  if (saved !== null) {
-    isCollapsed.value = JSON.parse(saved)
+  const windowWidth = window.innerWidth
+  const narrowThreshold = 900 // 窗口变窄的阈值
+  
+  // 如果窗口太窄，自动收起
+  if (windowWidth < narrowThreshold) {
+    isCollapsed.value = true
+  } else {
+    const saved = localStorage.getItem('serverListCollapsed')
+    if (saved !== null) {
+      isCollapsed.value = JSON.parse(saved)
+    }
   }
   
   // 加载保存的宽度
   const savedWidth = localStorage.getItem('serverListWidth')
   if (savedWidth !== null) {
     const width = parseInt(savedWidth, 10)
-    if (width >= 200 && width <= 800) {
+    if (width >= 300 && width <= 1000) {
       serverListWidth.value = width
     } else {
       serverListWidth.value = getDefaultWidth()
@@ -237,16 +268,37 @@ const saveCollapseState = () => {
 // 切换收起/展开
 function toggleCollapse() {
   isCollapsed.value = !isCollapsed.value
+  autoCollapsed.value = false // 用户手动操作，清除自动收起标记
   saveCollapseState()
 }
 
 // 调整宽度以适应窗口大小
 const adjustWidth = () => {
+  const windowWidth = window.innerWidth
+  const narrowThreshold = 900 // 窗口变窄的阈值
+  
+  // 如果窗口变窄，自动收起服务器列表
+  if (windowWidth < narrowThreshold) {
+    if (!isCollapsed.value) {
+      isCollapsed.value = true
+      autoCollapsed.value = true // 标记为自动收起
+      saveCollapseState()
+    }
+    return
+  }
+  
+  // 如果窗口变宽，且之前是自动收起的，自动展开
+  if (windowWidth >= narrowThreshold && autoCollapsed.value && isCollapsed.value) {
+    isCollapsed.value = false
+    autoCollapsed.value = false
+    saveCollapseState()
+  }
+  
+  // 如果已经收起，不调整宽度
   if (isCollapsed.value) return
   
-  const windowWidth = window.innerWidth
-  const minWidth = 200
-  const maxWidth = Math.min(600, windowWidth * 0.4) // 最大不超过窗口的40%
+  const minWidth = 300
+  const maxWidth = Math.min(1000, windowWidth * 0.5) // 最大不超过窗口的50%
   
   // 如果当前宽度超出范围，调整到合理范围
   if (serverListWidth.value < minWidth) {
@@ -415,6 +467,9 @@ function handleAddServer() {
 
 // 监听窗口大小变化
 onMounted(() => {
+  // 加载服务器列表
+  store.loadServers()
+  
   resizeHandler = () => {
     adjustWidth()
   }
@@ -432,7 +487,7 @@ onUnmounted(() => {
 
 <style scoped>
 .server-list {
-  min-width: 200px;
+  min-width: 300px;
   max-width: 50vw;
   background: var(--bg-secondary);
   border-right: 1px solid var(--border-color);
@@ -440,13 +495,46 @@ onUnmounted(() => {
   flex-direction: column;
   height: 100vh;
   transition: width 0.3s;
-  flex-shrink: 1;
+  flex-shrink: 0;
+  flex-grow: 0;
   overflow: hidden;
+  position: relative;
+  z-index: 10;
 }
 
 .server-list.collapsed {
   min-width: 40px;
   max-width: 40px;
+  flex-shrink: 0;
+  flex-grow: 0;
+}
+
+/* 底部位置时的样式 */
+.server-list.bottom-position {
+  border-right: none;
+  border-top: 1px solid var(--border-color);
+}
+
+.server-list.bottom-position.collapsed {
+  width: 100% !important;
+  min-width: 100% !important;
+  max-width: 100% !important;
+  height: 50px;
+  max-height: 50px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.server-list.bottom-position.collapsed .server-list-collapsed {
+  width: 100%;
+  height: 100%;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  padding: 0 8px;
 }
 
 .server-list-header {
@@ -464,23 +552,30 @@ onUnmounted(() => {
 }
 
 .collapse-btn {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   padding: 0;
-  font-size: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: transparent;
   border: 1px solid var(--border-color);
-  border-radius: 4px;
+  border-radius: 6px;
   color: var(--text-primary);
   cursor: pointer;
-  transition: background 0.2s;
+  transition: all 0.2s;
+  flex-shrink: 0;
 }
 
 .collapse-btn:hover {
   background: var(--bg-hover);
+  border-color: var(--primary-color, #4a90e2);
+  color: var(--primary-color, #4a90e2);
+}
+
+.collapse-btn svg {
+  width: 16px;
+  height: 16px;
 }
 
 /* 收起状态 */
@@ -496,29 +591,100 @@ onUnmounted(() => {
   gap: 8px;
 }
 
+/* 底部位置时的收起状态 */
+.server-list.bottom-position.collapsed .server-list-collapsed {
+  width: 100%;
+  height: 100%;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  padding: 0 8px;
+  border-right: none;
+  border-top: 1px solid var(--border-color);
+}
+
 .expand-btn {
   width: 32px;
   height: 32px;
   padding: 0;
-  font-size: 18px;
   background: transparent;
   border: none;
-  color: var(--text-primary);
+  color: var(--primary-color, #4a90e2);
   cursor: pointer;
-  transition: background 0.2s;
+  transition: all 0.2s;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
+  border-radius: 6px;
+  margin-top: 8px;
 }
 
 .expand-btn:hover {
   background: var(--bg-hover);
+  transform: scale(1.1);
 }
 
-.server-list-header h3 {
+.expand-btn svg {
+  width: 24px;
+  height: 24px;
+  filter: drop-shadow(0 2px 4px rgba(74, 144, 226, 0.2));
+}
+
+/* 底部位置时的展开按钮 */
+.server-list.bottom-position.collapsed .expand-btn {
+  margin-top: 0;
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.server-list.bottom-position.collapsed .expand-btn svg {
+  width: 28px;
+  height: 28px;
+}
+
+.header-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.app-logo {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary-color, #4a90e2);
+  flex-shrink: 0;
+}
+
+.app-logo svg {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 2px 4px rgba(74, 144, 226, 0.3));
+}
+
+.app-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.app-name {
   font-size: 18px;
-  font-weight: 600;
+  font-weight: 700;
+  background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: -0.5px;
+}
+
+.app-subtitle {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-weight: 400;
+  letter-spacing: 0.5px;
 }
 
 .add-btn {
@@ -527,9 +693,28 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
-  font-size: 22px;
-  line-height: 1;
+  border-radius: 6px;
+  background: var(--primary-color, #4a90e2);
+  color: white;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.add-btn:hover {
+  background: var(--primary-color-hover, #357abd);
+  transform: scale(1.05);
+  box-shadow: 0 2px 8px rgba(74, 144, 226, 0.3);
+}
+
+.add-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.add-btn .icon {
+  display: none;
 }
 
 .server-items {

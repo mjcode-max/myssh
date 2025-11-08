@@ -116,9 +116,17 @@
     </div>
     <div v-else class="empty-state">
       <div class="empty-content">
-        <div class="empty-icon">🖥️</div>
-        <h3>欢迎使用 MySSH</h3>
-        <p>请从左侧添加并连接服务器以打开工作区</p>
+        <div class="empty-icon">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="empty-title">
+          <h3>欢迎使用 <span class="app-name-highlight">MySSH</span></h3>
+          <p>请从左侧添加并连接服务器以打开工作区</p>
+        </div>
       </div>
     </div>
   </div>
@@ -1094,17 +1102,52 @@ function refreshFileManager(serverId) {
 
 .empty-content {
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
 
 .empty-icon {
-  font-size: 64px;
-  margin-bottom: 16px;
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 24px auto;
+  color: var(--primary-color, #4a90e2);
+  opacity: 0.6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.empty-content h3 {
-  font-size: 20px;
-  margin-bottom: 8px;
+.empty-icon svg {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 4px 8px rgba(74, 144, 226, 0.2));
+}
+
+.empty-title {
+  text-align: center;
+}
+
+.empty-title h3 {
+  font-size: 24px;
+  font-weight: 600;
+  margin-bottom: 12px;
   color: var(--text-primary);
+}
+
+.app-name-highlight {
+  background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-weight: 700;
+}
+
+.empty-title p {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0;
 }
 
 .empty-content p {

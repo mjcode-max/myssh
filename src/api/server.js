@@ -11,7 +11,16 @@ import { invoke } from '@tauri-apps/api/tauri'
 export async function getServers() {
   try {
     const result = await invoke('get_servers')
-    return result
+    // 后端返回格式: { servers: [...] }
+    // 将后端的 key_path 转换为前端的 keyPath
+    if (result && result.servers && Array.isArray(result.servers)) {
+      return result.servers.map(server => ({
+        ...server,
+        keyPath: server.key_path,
+        key_path: undefined
+      }))
+    }
+    return []
   } catch (error) {
     console.error('获取服务器列表失败:', error)
     throw new Error(error.message || '获取服务器列表失败')
@@ -31,15 +40,18 @@ export async function getServers() {
  * @returns {Promise<{success: boolean, id: string}>}
  */
 export async function saveServer(server) {
+  console.log("add server:", server)
   try {
     const result = await invoke('save_server', {
-      id: server.id,
-      name: server.name,
-      host: server.host,
-      port: server.port,
-      username: server.username,
-      password: server.password || null,
-      keyPath: server.keyPath || null
+      params:{
+        id: server.id,
+        name: server.name,
+        host: server.host,
+        port: server.port,
+        username: server.username,
+        password: server.password || null,
+        key_path: server.keyPath || null
+      }
     })
     return result
   } catch (error) {
@@ -63,13 +75,15 @@ export async function saveServer(server) {
 export async function updateServer(server) {
   try {
     const result = await invoke('update_server', {
-      id: server.id,
-      name: server.name || null,
-      host: server.host || null,
-      port: server.port || null,
-      username: server.username || null,
-      password: server.password || null,
-      keyPath: server.keyPath || null
+      params: {
+        id: server.id,
+        name: server.name || null,
+        host: server.host || null,
+        port: server.port || null,
+        username: server.username || null,
+        password: server.password || null,
+        key_path: server.keyPath || null
+      }
     })
     return result
   } catch (error) {
@@ -86,7 +100,9 @@ export async function updateServer(server) {
 export async function deleteServer(serverId) {
   try {
     const result = await invoke('delete_server', {
-      serverId: serverId
+      params: {
+        server_id: serverId
+      }
     })
     return result
   } catch (error) {
@@ -103,9 +119,19 @@ export async function deleteServer(serverId) {
 export async function getServer(serverId) {
   try {
     const result = await invoke('get_server', {
-      serverId: serverId
+      params: {
+        server_id: serverId
+      }
     })
-    return result
+    // 后端返回格式: { server: {...} }
+    if (result && result.server) {
+      return {
+        ...result.server,
+        keyPath: result.server.key_path,
+        key_path: undefined
+      }
+    }
+    return null
   } catch (error) {
     console.error('获取服务器配置失败:', error)
     throw new Error(error.message || '获取服务器配置失败')

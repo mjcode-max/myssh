@@ -40,7 +40,9 @@ import { invoke } from '@tauri-apps/api/tauri'
 export async function getSystemMonitor(serverId) {
   try {
     const result = await invoke('get_system_monitor', {
-      serverId: serverId
+      params: {
+        server_id: serverId
+      }
     })
     return result
   } catch (error) {

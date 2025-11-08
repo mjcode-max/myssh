@@ -18,12 +18,14 @@ import { invoke } from '@tauri-apps/api/tauri'
 export async function connectSshServer(params) {
   try {
     const result = await invoke('connect_ssh_server', {
-      serverId: params.serverId,
-      host: params.host,
-      port: params.port,
-      username: params.username,
-      password: params.password || null,
-      keyPath: params.keyPath || null
+      params: {
+        server_id: params.serverId,
+        host: params.host,
+        port: params.port,
+        username: params.username,
+        password: params.password || null,
+        key_path: params.keyPath || null
+      }
     })
     return result
   } catch (error) {
@@ -40,7 +42,9 @@ export async function connectSshServer(params) {
 export async function disconnectSshServer(serverId) {
   try {
     const result = await invoke('disconnect_ssh_server', {
-      serverId: serverId
+      params: {
+        server_id: serverId
+      }
     })
     return result
   } catch (error) {
@@ -59,8 +63,10 @@ export async function disconnectSshServer(serverId) {
 export async function executeSshCommand(params) {
   try {
     const result = await invoke('execute_ssh_command', {
-      serverId: params.serverId,
-      command: params.command
+      params: {
+        server_id: params.serverId,
+        command: params.command
+      }
     })
     return result
   } catch (error) {
@@ -77,7 +83,9 @@ export async function executeSshCommand(params) {
 export async function reconnectTerminal(serverId) {
   try {
     const result = await invoke('reconnect_terminal', {
-      serverId: serverId
+      params: {
+        server_id: serverId
+      }
     })
     return result
   } catch (error) {

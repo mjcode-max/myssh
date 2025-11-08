@@ -14,7 +14,13 @@ export const useServerStore = defineStore('server', () => {
       const result = await getServers()
       // 将后端返回的服务器配置转换为前端格式
       servers.value = result.map(server => ({
-        ...server,
+        id: server.id,
+        name: server.name,
+        host: server.host,
+        port: server.port,
+        username: server.username,
+        password: server.password,
+        keyPath: server.keyPath || server.key_path, // 兼容两种命名
         connected: false,
         tabs: []
       }))

@@ -14,8 +14,10 @@ import { invoke } from '@tauri-apps/api/tauri'
 export async function listRemoteDirectory(params) {
   try {
     const result = await invoke('list_remote_directory', {
-      serverId: params.serverId,
-      path: params.path
+      params: {
+        server_id: params.serverId,
+        path: params.path
+      }
     })
     return result
   } catch (error) {
@@ -35,9 +37,11 @@ export async function listRemoteDirectory(params) {
 export async function uploadFile(params) {
   try {
     const result = await invoke('upload_file', {
-      serverId: params.serverId,
-      localPath: params.localPath,
-      remotePath: params.remotePath
+      params: {
+        server_id: params.serverId,
+        local_path: params.localPath,
+        remote_path: params.remotePath
+      }
     })
     return result
   } catch (error) {
@@ -95,9 +99,11 @@ export async function uploadFiles(params) {
 export async function downloadFile(params) {
   try {
     const result = await invoke('download_file', {
-      serverId: params.serverId,
-      remotePath: params.remotePath,
-      localPath: params.localPath
+      params: {
+        server_id: params.serverId,
+        remote_path: params.remotePath,
+        local_path: params.localPath
+      }
     })
     return result
   } catch (error) {
@@ -116,8 +122,10 @@ export async function downloadFile(params) {
 export async function createDirectory(params) {
   try {
     const result = await invoke('create_directory', {
-      serverId: params.serverId,
-      path: params.path
+      params: {
+        server_id: params.serverId,
+        path: params.path
+      }
     })
     return result
   } catch (error) {
@@ -136,8 +144,10 @@ export async function createDirectory(params) {
 export async function deleteFiles(params) {
   try {
     const result = await invoke('delete_files', {
-      serverId: params.serverId,
-      paths: params.paths
+      params: {
+        server_id: params.serverId,
+        paths: params.paths
+      }
     })
     return result
   } catch (error) {
@@ -157,9 +167,11 @@ export async function deleteFiles(params) {
 export async function renameFile(params) {
   try {
     const result = await invoke('rename_file', {
-      serverId: params.serverId,
-      oldPath: params.oldPath,
-      newPath: params.newPath
+      params: {
+        server_id: params.serverId,
+        old_path: params.oldPath,
+        new_path: params.newPath
+      }
     })
     return result
   } catch (error) {
@@ -179,9 +191,11 @@ export async function renameFile(params) {
 export async function changeFileMode(params) {
   try {
     const result = await invoke('change_file_mode', {
-      serverId: params.serverId,
-      path: params.path,
-      mode: params.mode
+      params: {
+        server_id: params.serverId,
+        path: params.path,
+        mode: params.mode
+      }
     })
     return result
   } catch (error) {
